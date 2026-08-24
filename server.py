@@ -54,14 +54,22 @@ async def handler(websocket):
 
                 rooms.setdefault(room_code, {})
 
-                # Annonce les joueurs déjà présents au nouveau venu.
+                # On confirme d'abord son propre identifiant au nouveau
+                # venu — le client en a besoin avant de pouvoir traiter
+                # quoi que ce soit d'autre.
+                await websocket.send(json.dumps({
+                    "type": "joined",
+                    "id": peer_id,
+                }))
+
+                # Puis on lui annonce les joueurs déjà présents.
                 for existing_id in rooms[room_code]:
                     await websocket.send(json.dumps({
                         "type": "peer_connected",
                         "id": existing_id,
                     }))
 
-                # Annonce le nouveau venu à tout le monde déjà présent.
+                # Et on annonce le nouveau venu à tout le monde déjà présent.
                 for existing_ws in rooms[room_code].values():
                     await existing_ws.send(json.dumps({
                         "type": "peer_connected",
@@ -69,11 +77,6 @@ async def handler(websocket):
                     }))
 
                 rooms[room_code][peer_id] = websocket
-
-                await websocket.send(json.dumps({
-                    "type": "joined",
-                    "id": peer_id,
-                }))
 
             elif msg_type == "signal":
                 # Relaie un message WebRTC (offer/answer/candidate) vers
