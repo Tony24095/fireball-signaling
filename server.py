@@ -37,7 +37,6 @@ async def health_check(connection, request):
 
 
 async def handler(websocket):
-    global _next_peer_id
 
     room_code: str | None = None
     peer_id: int | None = None
@@ -49,8 +48,8 @@ async def handler(websocket):
 
             if msg_type == "join":
                 room_code = str(message["room"]).upper().strip()
-                peer_id = _next_peer_id
-                _next_peer_id += 1
+                peer_id = room_next_id.get(room_code, 0)
+                room_next_id[room_code] = peer_id + 1
 
                 rooms.setdefault(room_code, {})
 
@@ -92,7 +91,7 @@ async def handler(websocket):
     except websockets.exceptions.ConnectionClosed:
         pass
     finally:
-        if room_code and peer_id and room_code in rooms:
+        if room_code and peer_id is not None and room_code in rooms:
             rooms[room_code].pop(peer_id, None)
             for remaining_ws in rooms[room_code].values():
                 await remaining_ws.send(json.dumps({
