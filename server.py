@@ -24,9 +24,6 @@ room_next_id: dict[str, int] = {}
 
 
 async def health_check(connection, request):
-    # Render (et les services de "keep-alive") font des requêtes HTTP
-    # classiques pour vérifier que le serveur répond. On les distingue
-    # d'une vraie connexion WebSocket via l'en-tête "Upgrade".
     if request.headers.get("Upgrade", "").lower() != "websocket":
         return Response(
             200, "OK",
@@ -48,27 +45,25 @@ async def handler(websocket):
 
             if msg_type == "join":
                 room_code = str(message["room"]).upper().strip()
-                peer_id = room_next_id.get(room_code, 0)
+                # Le premier joueur d'un salon DOIT recevoir l'identifiant 1
+                # (Godot réserve 0 à "diffuser à tout le monde", et 1 au
+                # joueur considéré comme "l'hôte").
+                peer_id = room_next_id.get(room_code, 1)
                 room_next_id[room_code] = peer_id + 1
 
                 rooms.setdefault(room_code, {})
 
-                # On confirme d'abord son propre identifiant au nouveau
-                # venu — le client en a besoin avant de pouvoir traiter
-                # quoi que ce soit d'autre.
                 await websocket.send(json.dumps({
                     "type": "joined",
                     "id": peer_id,
                 }))
 
-                # Puis on lui annonce les joueurs déjà présents.
                 for existing_id in rooms[room_code]:
                     await websocket.send(json.dumps({
                         "type": "peer_connected",
                         "id": existing_id,
                     }))
 
-                # Et on annonce le nouveau venu à tout le monde déjà présent.
                 for existing_ws in rooms[room_code].values():
                     await existing_ws.send(json.dumps({
                         "type": "peer_connected",
@@ -78,8 +73,6 @@ async def handler(websocket):
                 rooms[room_code][peer_id] = websocket
 
             elif msg_type == "signal":
-                # Relaie un message WebRTC (offer/answer/candidate) vers
-                # le joueur destinataire, sans en interpréter le contenu.
                 target_id = message["to"]
                 if room_code and target_id in rooms.get(room_code, {}):
                     await rooms[room_code][target_id].send(json.dumps({
@@ -100,10 +93,10 @@ async def handler(websocket):
                 }))
             if not rooms[room_code]:
                 del rooms[room_code]
+                room_next_id.pop(room_code, None)  # le salon repartira de 1 la prochaine fois
 
 
 async def main() -> None:
-    # Render fournit le port à utiliser via la variable d'environnement PORT.
     port = int(os.environ.get("PORT", 10000))
     async with websockets.serve(handler, "0.0.0.0", port, process_request=health_check):
         print(f"[signaling] En écoute sur le port {port}.")
