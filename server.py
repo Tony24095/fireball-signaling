@@ -20,7 +20,7 @@ import websockets
 from websockets import Headers, Response
 
 rooms: dict[str, dict[int, "websockets.ServerConnection"]] = {}
-_next_peer_id = 1
+room_next_id: dict[str, int] = {}
 
 
 async def health_check(connection, request):
